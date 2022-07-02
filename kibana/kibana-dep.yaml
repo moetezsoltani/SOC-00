@@ -1,0 +1,55 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: kube-logging
+  name: kibana
+  labels:
+    app: kibana
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: docker.elastic.co/kibana/kibana:7.17.1
+        ports:
+        - containerPort: 5601
+          name: webinterface
+        env:
+        - name: PATH_CONFIG
+          value: "/usr/share/kibana/cert"
+        - name: ELASTICSEARCH_HOSTS
+          value: "http://elasticsearch.kube-logging.svc.cluster.local:9200"
+        - name: ELASTICSEARCH_USER
+          value: "elastic"
+        - name: ELASTICSEARCH_PASSWORD
+          value: kibana
+        volumeMounts:
+        - name: config
+          mountPath: /usr/share/kibana/config/kibana.yml
+          readOnly: true
+          subPath: kibana.yml
+        - name: certk
+          mountPath: /usr/share/kibana/config/ca.crt
+          subPath: ca.crt
+        - name: certk
+          mountPath: /usr/share/kibana/config/my-kibana.crt
+          subPath: my-kibana.crt
+        - name: certk
+          mountPath: /usr/share/kibana/config/my-kibana.key
+          subPath: my-kibana.key  
+      volumes:
+      - name: config
+        configMap:
+          name: kibana-config
+      - name: certk
+        configMap:
+          name: certk
+   

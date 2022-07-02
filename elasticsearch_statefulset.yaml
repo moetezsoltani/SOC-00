@@ -1,0 +1,129 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: es-cluster
+  namespace: kube-logging
+spec:
+  serviceName: elasticsearch
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.17.1
+        resources:
+            limits:
+              cpu: 1000m
+            requests:
+              cpu: 100m
+        ports:
+        - containerPort: 9200
+          name: rest
+          protocol: TCP
+        - containerPort: 9300
+          name: inter-node
+          protocol: TCP
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/elasticsearch/data
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/ca.crt
+          subPath: ca.crt
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/elastic.crt
+          subPath: elastic.crt
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/elastic.key
+          subPath: elastic.key  
+        env:
+          - name: cluster.name
+            value: k8s-logs
+          - name: node.name
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: discovery.seed_hosts
+            value: "es-cluster-0"
+          - name: cluster.initial_master_nodes
+            value: "es-cluster-0,"
+          - name: network.host
+            value: "0.0.0.0"   
+          - name: xpack.security.enabled
+            value: "true"
+          - name: xpack.security.http.ssl.enabled
+            value: "false"     
+          - name: xpack.security.authc.api_key.enabled  
+            value: "true"
+          - name: xpack.security.transport.ssl.enabled
+            value: "true"
+          - name: xpack.security.http.ssl.key
+            value: "elastic.key"
+          - name: xpack.security.http.ssl.certificate
+            value: "elastic.crt"
+          - name: xpack.security.http.ssl.certificate_authorities
+            value: "ca.crt"
+          #- name: xpack.security.transport.ssl.key
+           # value: "elastic.key"
+          #- name: xpack.security.transport.ssl.certificate
+          #  value: "elastic.crt"
+          #- name: xpack.security.transport.ssl.certificate_authorities
+           # value: "ca.crt"
+          - name: xpack.security.transport.ssl.verification_mode
+            value: "none" 
+          - name: xpack.security.http.ssl.verification_mode
+            value: "none"   
+          - name: ELASTIC_USERNAME
+            value: "elastic"
+          - name: ELASTIC_PASSWORD
+            value: "kibana"
+          - name: ES_JAVA_OPTS
+            value: "-Xms512m -Xmx512m"
+      initContainers:
+      - name: fix-permissions
+        image: busybox
+        command: ["sh", "-c", "chown -R 1000:1000 /usr/share/elasticsearch/data"]
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - name: data
+          mountPath: /usr/share/elasticsearch/data
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/ca.crt
+          subPath: ca.crt
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/elastic.crt
+          subPath: elastic.crt
+        - name: certe
+          mountPath: /usr/share/elasticsearch/config/elastic.key
+          subPath: elastic.key  
+      - name: increase-vm-max-map
+        image: busybox
+        command: ["sysctl", "-w", "vm.max_map_count=262144"]
+        securityContext:
+          privileged: true
+      - name: increase-fd-ulimit
+        image: busybox
+        command: ["sh", "-c", "ulimit -n 65536"]
+        securityContext:
+          privileged: true
+      volumes:
+      - name: certe
+        configMap:
+          name: certe     
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+      labels:
+        app: elasticsearch
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 5Gi
